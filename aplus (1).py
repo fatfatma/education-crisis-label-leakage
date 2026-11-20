@@ -11,6 +11,7 @@ ayni komutla tekrar calistirinca tamamlanan modeller atlanir.
 """
 import sys, glob, os, json, time, argparse, warnings
 warnings.filterwarnings("ignore")
+os.environ.setdefault("PYTHONWARNINGS", "ignore")
 import numpy as np, pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
@@ -105,7 +106,8 @@ lines = []
 def say(*a):
     s = " ".join(str(x) for x in a); print(s, flush=True); lines.append(s)
 def save_txt():
-    open(os.path.join(OUT, "aplus_sonuclar.txt"), "w", encoding="utf-8").write("\n".join(lines))
+    with open(os.path.join(OUT, "aplus_sonuclar.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
 
 P = df.copy()
 gp = P.groupby("Country Code")
@@ -187,7 +189,10 @@ SPACE = {
  "Karar Ağacı": lambda t: DecisionTreeClassifier(max_depth=t.suggest_int("max_depth", 3, 20), min_samples_split=t.suggest_int("min_samples_split", 2, 10), min_samples_leaf=t.suggest_int("min_samples_leaf", 1, 8), criterion=t.suggest_categorical("criterion", ["gini", "entropy"]), class_weight="balanced", random_state=SEED),
 }
 ppath = os.path.join(OUT, "aplus_params.json")
-saved = json.load(open(ppath, encoding="utf-8")) if os.path.exists(ppath) else {}
+saved = {}
+if os.path.exists(ppath):
+    with open(ppath, encoding="utf-8") as fh:
+        saved = json.load(fh)
 if saved.get("_trials") != args.trials: saved = {"_trials": args.trials}
 say("\n=== Optuna (TPE, Median Pruner, 3 katli GroupKFold) ===")
 opt = {}
@@ -197,7 +202,8 @@ for name, build in SPACE.items():
         st = optuna.create_study(direction="maximize", sampler=TPESampler(seed=SEED), pruner=MedianPruner(n_startup_trials=10, n_warmup_steps=1))
         st.optimize(lambda t: cv_obj(t, build(t)), n_trials=args.trials)
         saved[name] = {"params": st.best_params, "cv": st.best_value, "sure_dk": round((time.time() - t0) / 60, 1)}
-        json.dump(saved, open(ppath, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        with open(ppath, "w", encoding="utf-8") as fh:
+            json.dump(saved, fh, ensure_ascii=False, indent=1)
     opt[name] = build(optuna.trial.FixedTrial(saved[name]["params"]))
     say(f"{name:20s} en iyi ic CV makro F1 = {saved[name]['cv']:.4f}")
 save_txt()
